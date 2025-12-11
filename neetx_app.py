@@ -14,11 +14,11 @@ st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="centered", 
 
 # *** EMAIL SETTINGS ***
 # using FormSubmit, emails will be sent TO this address
-ADMIN_EMAIL = "jeexaipro@gmail.com"  
+ADMIN_EMAIL = "neetxaipro@gmail.com"  
 
 # --- 2. GLOBAL CONSTANTS ---
 # REPLACE THIS URL WITH YOUR GREEN NEETx LOGO URL
-LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/jeex-launch/1d6ef8ca3ac05432ed370338d4c04d6a03541f23/logo.png.png" 
+LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/NEETx-Pro-Launch/8d68c3320b268e9a819e643b5e9195d27c28f3d0/logo.jpg" 
 # (For now I kept the old link as placeholder, please update it to your Green Logo)
 
 # --- 3. SESSION STATE INITIALIZATION ---
@@ -252,7 +252,7 @@ with st.sidebar:
     # --- CONTACT US DROPDOWN ---
     st.markdown("---")
     with st.expander("📞 Contact Us"):
-        st.write("**Email:** jeexaipro@gmail.com")
+        st.write("**Email:** neetxaipro@gmail.com")
         st.write("**WhatsApp:** +91 9839940400")
     
     # --- TERMS & CONDITIONS DROPDOWN ---
@@ -420,3 +420,4 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
     if 'audio_value' in locals() and audio_value: st.session_state.audio_key += 1
     st.session_state.processing = False
     st.rerun()
+
