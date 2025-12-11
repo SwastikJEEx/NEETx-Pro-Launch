@@ -17,8 +17,8 @@ st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="centered", 
 ADMIN_EMAIL = "neetxaipro@gmail.com"  
 
 # --- 2. GLOBAL CONSTANTS ---
-# UPDATED: Using the reliable ?raw=true GitHub link format
-LOGO_URL = "https://github.com/SwastikJEEx/NEETx-Pro-Launch/blob/4814337f0fd7acabc61714efaf364e602ea11e86/logo.jpg?raw=true"
+# UPDATED: Using the exact filename you mentioned (double extension)
+LOGO_PATH = "logo.jpg.png"
 
 # --- 3. SESSION STATE INITIALIZATION ---
 if "messages" not in st.session_state:
@@ -142,8 +142,8 @@ def show_branding():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         try:
-            # Display Logo from URL
-            st.image(LOGO_URL, width=280)
+            # Display Logo from local file
+            st.image(LOGO_PATH, width=280)
         except: 
             # Fallback
             st.markdown(f"**NEETx PRO**")
@@ -347,7 +347,7 @@ if prompt:
 
 # Display Messages
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar=LOGO_URL if msg["role"]=="assistant" else "🧑‍⚕️"):
+    with st.chat_message(msg["role"], avatar=LOGO_PATH if msg["role"]=="assistant" else "🧑‍⚕️"):
         if "file_data" in msg:
             if str(msg["file_type"]).startswith("image"): st.image(msg["file_data"], width=200)
             else: st.markdown(f"📄 *{msg.get('file_name')}*")
@@ -397,7 +397,7 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
         5. **TONE**: Encouraging but disciplined. Use medical analogies where appropriate. Call the user "Future Doctor".
         """
         
-        with st.chat_message("assistant", avatar=LOGO_URL):
+        with st.chat_message("assistant", avatar=LOGO_PATH):
             stream = client.beta.threads.runs.create(
                 thread_id=st.session_state.thread_id, assistant_id=assistant_id, stream=True,
                 additional_instructions=INSTRUCTIONS,
