@@ -14,12 +14,11 @@ st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="centered", 
 
 # *** EMAIL SETTINGS ***
 # using FormSubmit, emails will be sent TO this address
-ADMIN_EMAIL = "neetxaipro@gmail.com"  
+ADMIN_EMAIL = "jeexaipro@gmail.com"  
 
 # --- 2. GLOBAL CONSTANTS ---
-# REPLACE THIS URL WITH YOUR GREEN NEETx LOGO URL
-LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/NEETx-Pro-Launch/8d68c3320b268e9a819e643b5e9195d27c28f3d0/logo.jpg" 
-# (For now I kept the old link as placeholder, please update it to your Green Logo)
+# UPDATED: Using the Raw GitHub URL you provided
+LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/NEETx-Pro-Launch/8d68c3320b268e9a819e643b5e9195d27c28f3d0/logo.jpg"
 
 # --- 3. SESSION STATE INITIALIZATION ---
 if "messages" not in st.session_state:
@@ -142,8 +141,13 @@ def clean_latex_for_chat(text):
 def show_branding():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        try: st.image(LOGO_URL, width=280) 
-        except: pass
+        try:
+            # Display Logo from URL
+            st.image(LOGO_URL, width=280)
+        except: 
+            # Fallback
+            st.markdown(f"**NEETx PRO**")
+
     st.markdown("""
         <div style="text-align: center; margin-top: -15px; margin-bottom: 30px;">
             <h1 style="margin: 0; font-size: 42px; font-weight: 700; letter-spacing: 1px;">
@@ -252,7 +256,7 @@ with st.sidebar:
     # --- CONTACT US DROPDOWN ---
     st.markdown("---")
     with st.expander("📞 Contact Us"):
-        st.write("**Email:** neetxaipro@gmail.com")
+        st.write("**Email:** jeexaipro@gmail.com")
         st.write("**WhatsApp:** +91 9839940400")
     
     # --- TERMS & CONDITIONS DROPDOWN ---
@@ -420,4 +424,3 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
     if 'audio_value' in locals() and audio_value: st.session_state.audio_key += 1
     st.session_state.processing = False
     st.rerun()
-
