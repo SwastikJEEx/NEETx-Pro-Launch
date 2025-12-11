@@ -385,7 +385,7 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
         You are NEETx, an elite AI Tutor for NEET UG aspirants.
         
         YOUR PERSONA:
-        - **Role:** Senior Medical Student Mentor (Bhaiya/Didi).
+        - **Role:** Senior Medical Student Mentor .
         - **Language:** **Hinglish** (Mix of English & Hindi). Use phrases like "Dekho future doctor," "Ye concept important hai," "Samjhe?".
         - **Tone:** Encouraging, Disciplined, and Friendly.
         
@@ -430,3 +430,4 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
     if 'audio_value' in locals() and audio_value: st.session_state.audio_key += 1
     st.session_state.processing = False
     st.rerun()
+
