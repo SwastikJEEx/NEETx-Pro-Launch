@@ -14,11 +14,11 @@ st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="centered", 
 
 # *** EMAIL SETTINGS ***
 # using FormSubmit, emails will be sent TO this address
-ADMIN_EMAIL = "jeexaipro@gmail.com"  
+ADMIN_EMAIL = "neetxaipro@gmail.com"  
 
 # --- 2. GLOBAL CONSTANTS ---
-# UPDATED: Using the Raw GitHub URL derived from your permalink
-LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/NEETx-Pro-Launch/4814337f0fd7acabc61714efaf364e602ea11e86/logo.jpg"
+# UPDATED: Using the reliable ?raw=true GitHub link format
+LOGO_URL = "https://github.com/SwastikJEEx/NEETx-Pro-Launch/blob/4814337f0fd7acabc61714efaf364e602ea11e86/logo.jpg?raw=true"
 
 # --- 3. SESSION STATE INITIALIZATION ---
 if "messages" not in st.session_state:
@@ -256,7 +256,7 @@ with st.sidebar:
     # --- CONTACT US DROPDOWN ---
     st.markdown("---")
     with st.expander("📞 Contact Us"):
-        st.write("**Email:** jeexaipro@gmail.com")
+        st.write("**Email:** neetxaipro@gmail.com")
         st.write("**WhatsApp:** +91 9839940400")
     
     # --- TERMS & CONDITIONS DROPDOWN ---
