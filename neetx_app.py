@@ -17,8 +17,8 @@ st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="centered", 
 ADMIN_EMAIL = "jeexaipro@gmail.com"  
 
 # --- 2. GLOBAL CONSTANTS ---
-# UPDATED: Using the Raw GitHub URL you provided
-LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/NEETx-Pro-Launch/8d68c3320b268e9a819e643b5e9195d27c28f3d0/logo.jpg"
+# UPDATED: Using the Raw GitHub URL derived from your permalink
+LOGO_URL = "https://raw.githubusercontent.com/SwastikJEEx/NEETx-Pro-Launch/4814337f0fd7acabc61714efaf364e602ea11e86/logo.jpg"
 
 # --- 3. SESSION STATE INITIALIZATION ---
 if "messages" not in st.session_state:
