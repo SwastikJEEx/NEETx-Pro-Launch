@@ -1,513 +1,635 @@
-import streamlit as st
-import time
-from openai import OpenAI
-import os
-import re
-from datetime import datetime, timedelta
-from fpdf import FPDF
-import requests
-import traceback
-import logging
-
-# --- 1. CONFIGURATION ---
-# CHANGED: layout="wide" for wider chat area
-st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="wide", initial_sidebar_state="expanded")
-
-# *** EMAIL SETTINGS ***
-# using FormSubmit, emails will be sent TO this address
-ADMIN_EMAIL = "neetxaipro@gmail.com"  
-
-# --- 2. GLOBAL CONSTANTS ---
-# Using the local file name as per your last setup
-LOGO_PATH = "logo.jpg.png"
-
-# --- 3. SESSION STATE INITIALIZATION ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Welcome Future Doctor! 🩺 Biology, Chemistry or Physics—doubt upload karo ya poocho. Let's dominate NEET! 🧬"}]
-if "processing" not in st.session_state: st.session_state.processing = False
-if "uploader_key" not in st.session_state: st.session_state.uploader_key = 0
-if "audio_key" not in st.session_state: st.session_state.audio_key = 0
-if "current_uploaded_file" not in st.session_state: st.session_state.current_uploaded_file = None
-
-# AUTH & REGISTRATION STATE
-if "is_verified" not in st.session_state: st.session_state.is_verified = False
-if "user_details" not in st.session_state: st.session_state.user_details = {}
-
-# MODE STATES
-# We initialize this key in session state for the toggle to bind to it
-if "ultimate_mode" not in st.session_state: st.session_state.ultimate_mode = False
-if "deep_research_mode" not in st.session_state: st.session_state.deep_research_mode = False
-
-# Simple logger
-logger = logging.getLogger("neetx")
-logger.setLevel(logging.INFO)
-
-# --- 4. PROFESSIONAL DARK GREEN CSS (THEME MATCHING) ---
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEETx - AI Learning Assistant</title>
     
-    /* Main Background - Darker for contrast */
-    .stApp { background-color: #050805 !important; color: #E0E0E0 !important; }
-    [data-testid="stSidebar"] { background-color: #0A110A !important; border-right: 1px solid #1E3A1E !important; }
-    header, header * { background-color: #050805 !important; color: #E0E0E0 !important; }
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    /* Text Colors */
-    h1, h2, h3, h4, h5, h6, p, li, div, span, label, a, small, strong, code { color: #E0E0E0 !important; }
-    strong { color: #2ECC71 !important; font-weight: 600; } /* Neon Green Strong Text */
-
-    /* BIGGER CHAT TEXT FOR READABILITY */
-    .stChatMessage p, .stChatMessage li, .stChatMessage div {
-        font-size: 1.15rem !important;
-        line-height: 1.6 !important;
-    }
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    /* Inputs & Selects - Green Borders */
-    div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="base-input"] {
-        background-color: #0F1C0F !important; 
-        border: 1px solid #2ECC71 !important; 
-        border-radius: 8px !important;
-    }
-    input[type="text"], input[type="password"], textarea { color: #FFFFFF !important; }
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    /* Buttons - NEET Green Theme */
-    button, .stButton>button {
-        background-color: #2ECC71 !important; /* Emerald Green */
-        color: #000000 !important; /* Black Text for contrast */
-        border-radius: 8px !important; 
-        font-weight: 700 !important;
-    }
-    button:hover, .stButton>button:hover { 
-        background-color: #27AE60 !important; /* Darker Green on Hover */
-        box-shadow: 0px 0px 10px rgba(46, 204, 113, 0.4) !important;
-    }
-    
-    /* File Uploader */
-    [data-testid="stFileUploader"] { 
-        background-color: #0A110A !important; 
-        border: 1px solid #1E3A1E !important; 
-        border-radius: 8px !important; 
-    }
-    
-    /* Chat Input */
-    .stChatInput { border-color: #2ECC71 !important; }
-    
-    /* Spinner/Loader Color */
-    .stSpinner > div > div { border-top-color: #2ECC71 !important; }
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
-    .block-container { padding-top: 1rem; padding-bottom: 140px; max-width: 1200px; margin: 0 auto; }
-</style>
-""", unsafe_allow_html=True)
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-# --- 5. HELPER FUNCTIONS ---
-
-def send_lead_notification(name, email, phone):
-    """Sends Lead Generation email via FormSubmit"""
-    url = f"https://formsubmit.co/{ADMIN_EMAIL}"
-    payload = {
-        "_subject": f"🧬 NEW NEETx USER: {name}",
-        "_captcha": "false", 
-        "_template": "table",
-        "Name": name,
-        "Email": email,
-        "Phone": phone,
-        "Status": "Free Trial Activated",
-        "Timestamp": str(datetime.now())
-    }
-    try:
-        requests.post(url, data=payload)
-        return True
-    except Exception as e:
-        logger.error(f"Lead send failed: {e}")
-        return True
-
-def cleanup_text_for_pdf(text):
-    """Translates LaTeX and special chars to PDF-friendly text"""
-    if not text: return ""
-    text = re.sub(r'【.*?†source】', '', text)
-    
-    replacements = {
-        r'\alpha': 'alpha', r'\beta': 'beta', r'\gamma': 'gamma', r'\theta': 'theta',
-        r'\pi': 'pi', r'\infty': 'infinity',
-        r'\le': '<=', r'\ge': '>=', r'\neq': '!=', r'\approx': '~=',
-        r'\rightarrow': '->', r'\leftarrow': '<-', r'\implies': '=>',
-        r'\cdot': '*', r'\times': 'x',
-        r'\frac': ' frac ', r'\sqrt': 'sqrt',
-        r'\int': 'Integral ', r'\sum': 'Sum ',
-        '$$': '\n', '$': ''
-    }
-    for latex, plain in replacements.items():
-        text = text.replace(latex, plain)
-    text = text.replace('{', '(').replace('}', ')')
-    text = text.replace('\\', '')
-    return text
-
-def clean_latex_for_chat(text):
-    if not text: return ""
-    text = re.sub(r'【.*?†source】', '', text)
-    text = re.sub(r'\\\[(.*?)\\\]', r'$$\1$$', text, flags=re.DOTALL)
-    text = re.sub(r'\\\((.*?)\\\)', r'$\1$', text, flags=re.DOTALL)
-    return text
-
-def show_branding():
-    # Adjusted columns for wide layout to keep logo centered
-    c1, c2, c3 = st.columns([2, 2, 2])
-    with c2:
-        try:
-            # Display Logo from local file
-            st.image(LOGO_PATH, use_container_width=True)
-        except: 
-            # Fallback
-            st.markdown(f"**NEETx PRO**")
-
-    st.markdown("""
-        <div style="text-align: center; margin-top: -15px; margin-bottom: 30px;">
-            <h1 style="margin: 0; font-size: 52px; font-weight: 700; letter-spacing: 1px;">
-                NEETx <span style="color:#2ECC71;">PRO</span>
-            </h1>
-            <p style="color: #AAAAAA; font-size: 18px; margin-top: 8px;">
-                Your AI Biology, Physics & Chem Tutor | <strong>Target 720/720</strong> 🩺
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-
-class PDF(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, 'NEETx Pro - Revision Notes', 0, 1, 'C')
-        self.ln(5)
-    def chapter_title(self, label):
-        self.set_font('Arial', 'B', 12)
-        self.set_text_color(46, 204, 113) # Green Color
-        self.cell(0, 10, str(label), 0, 1, 'L')
-        self.ln(2)
-    def chapter_body(self, body):
-        self.set_font('Arial', '', 11)
-        self.set_text_color(50, 50, 50)
-        self.clean = cleanup_text_for_pdf(body)
-        clean = self.clean.encode('latin-1', 'replace').decode('latin-1')
-        self.multi_cell(0, 7, clean)
-        self.ln()
-
-def generate_pdf(messages):
-    pdf = PDF()
-    pdf.add_page()
-    for msg in messages:
-        role = "NEETx" if msg["role"] == "assistant" else "Future_Dr"
-        pdf.chapter_title(role)
-        pdf.chapter_body(msg["content"])
-    return pdf.output(dest='S').encode('latin-1', 'ignore')
-
-if st.session_state.get('logout', False):
-    st.session_state.clear()
-    st.rerun()
-
-# --- 6. SIDEBAR LOGIC (FREE REGISTRATION & TOOLS) ---
-with st.sidebar:
-    # A. IF NOT VERIFIED -> SHOW REGISTRATION FORM
-    if not st.session_state.is_verified:
-        st.markdown("## 🔓 Get Free Access")
-        st.info("Unlock your AI Medical Coach instantly.")
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0fdf4; /* Light Green bg */
+        }
         
-        with st.form("signup_form"):
-            name = st.text_input("Full Name")
-            email = st.text_input("Email Address")
-            phone = st.text_input("Phone Number")
-            submit_reg = st.form_submit_button("🩺 Start Free Trial")
-        
-        if submit_reg:
-            if name and email and phone:
-                with st.spinner("Activating NEETx Engine..."):
-                    send_lead_notification(name, email, phone)
-                    st.session_state.user_details = {"name": name, "email": email}
-                    st.session_state.is_verified = True
-                    st.toast(f"Welcome, {name}! Let's study.", icon="🚀")
-                    time.sleep(1)
-                    st.rerun()
-            else:
-                st.warning("⚠️ Please fill in all details.")
-    
-    # B. IF VERIFIED -> SHOW TOOLS
-    else:
-        st.markdown(f"👤 **{st.session_state.user_details.get('name', 'Doctor')}**")
-        st.success("✅ NEETx Pro Active")
-        st.markdown("---")
-        
-        # --- NEW FEATURES: NEETX ULTIMATE & TOOLS ---
-        st.markdown("### ⚡ Power Tools")
-        
-        # 1. NEETx Ultimate Toggle
-        # Using key='ultimate_mode' automatically syncs with session_state, fixing the 2-click bug.
-        st.toggle("🔥 NEETx Ultimate", key="ultimate_mode", help="Unlock advanced problem solving and deep conceptual analysis.")
-        
-        if st.session_state.ultimate_mode:
-            st.caption("🚀 Advanced Mode: ON")
-        
-        # 2. Tools Buttons (Layout in columns)
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            if st.button("📚 Formulas", use_container_width=True):
-                 st.toast("Formula Sheet Mode: Ask for any chapter!", icon="📐")
-                 st.session_state.messages.append({"role": "assistant", "content": "I'm ready! Which chapter's **Formula Sheet** do you need? (e.g., Electrostatics, Genetics)"})
-                 st.rerun()
-        with col_t2:
-            if st.button("📝 Mock Test", use_container_width=True):
-                st.toast("Mock Test Initialized...", icon="⏳")
-                st.session_state.messages.append({"role": "assistant", "content": "Let's test your prep! 🎯 Topic batao, I'll generate a **Mini Mock Test** with 5 tough questions."})
-                st.rerun()
-        
-        # 3. Deep Research Toggle (Full width below others)
-        st.toggle("🔬 Deep Research", key="deep_research_mode", help="Enable deep theoretical explanations and first-principles derivations.")
-        
-        if st.session_state.deep_research_mode:
-            st.caption("🧐 Research Mode: ON")
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
 
-        st.markdown("---")
+        /* 3D Flip Animation */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
 
-        # --- SESSION CONTROLS ---
-        if st.button("✨ New Session", use_container_width=True):
-            st.session_state.messages = [{"role": "assistant", "content": "Fresh start! 🌟 What topic shall we tackle now?"}]
-            # Reset thread ID to force a new context (if you want fresh context)
-            if "thread_id" in st.session_state:
-                del st.session_state.thread_id
-            st.toast("Chat history cleared!", icon="🧹")
-            st.rerun()
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
         
-        st.markdown("**📎 Attach Question**")
-        
-        # File Uploader Logic
-        if st.session_state.processing:
-            if st.session_state.current_uploaded_file:
-                st.markdown("**Attachment (locked):**")
-                st.markdown(f"📄 *{getattr(st.session_state.current_uploaded_file, 'name', 'file')}*")
-            else:
-                st.markdown("_Locked while answering._")
-        else:
-            uploaded_file = st.file_uploader("Upload", type=["jpg", "png", "pdf"], key=f"uploader_{st.session_state.uploader_key}", label_visibility="collapsed")
-            if uploaded_file:
-                st.session_state.current_uploaded_file = uploaded_file
+        /* Loader */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #059669;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- Constants & Data ---
+        const NEET_SYLLABUS = {
+            "Physics": [
+                "Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy and Power",
+                "Motion of System of Particles", "Gravitation", "Properties of Bulk Matter", "Thermodynamics",
+                "Oscillations and Waves", "Electrostatics", "Current Electricity", "Magnetic Effects of Current",
+                "Magnetism", "Electromagnetic Induction", "Alternating Currents", "Electromagnetic Waves",
+                "Optics", "Dual Nature of Matter", "Atoms and Nuclei", "Electronic Devices"
+            ],
+            "Chemistry": [
+                "Some Basic Concepts of Chemistry", "Structure of Atom", "Classification of Elements",
+                "Chemical Bonding", "States of Matter", "Thermodynamics", "Equilibrium", "Redox Reactions",
+                "Hydrogen", "s-Block Elements", "p-Block Elements", "Organic Chemistry - Basic Principles",
+                "Hydrocarbons", "Environmental Chemistry", "Solid State", "Solutions", "Electrochemistry",
+                "Chemical Kinetics", "Surface Chemistry", "Coordination Compounds", "Haloalkanes and Haloarenes",
+                "Alcohols, Phenols and Ethers", "Aldehydes, Ketones and Carboxylic Acids", "Amines", "Biomolecules",
+                "Polymers", "Chemistry in Everyday Life"
+            ],
+            "Biology": [
+                "Diversity in Living World", "Structural Organisation in Animals and Plants", "Cell Structure and Function",
+                "Plant Physiology", "Human Physiology", "Reproduction", "Genetics and Evolution",
+                "Biology and Human Welfare", "Biotechnology and Its Applications", "Ecology and Environment"
+            ]
+        };
+
+        const MOCK_FLASHCARDS = [
+            { front: "What is the unit of Electric Field?", back: "Newton per Coulomb (N/C) or Volt per meter (V/m)" },
+            { front: "Define Osmosis.", back: "Movement of solvent molecules from lower solute concentration to higher solute concentration through a semi-permeable membrane." },
+            { front: "What is the general formula of Alkanes?", back: "CnH2n+2" },
+            { front: "Who is known as the father of Genetics?", back: "Gregor Mendel" },
+            { front: "What is the value of Universal Gravitational Constant (G)?", back: "6.674 × 10⁻¹¹ N·m²/kg²" }
+        ];
+
+        // --- API Helper ---
+        const generateGeminiFlashcards = async (subject, chapters, level, count) => {
+            const apiKey = ""; // Injected by environment
             
-            if st.session_state.current_uploaded_file:
-                if st.button("Remove attachment"):
-                    st.session_state.current_uploaded_file = None
-                    st.session_state.uploader_key += 1
-                    st.rerun()
-        
-        st.markdown("**🎙️ Voice Chat**")
-        audio_value = st.audio_input("Speak", key=f"audio_{st.session_state.audio_key}", label_visibility="collapsed")
-        st.markdown("---")
-        
-        if len(st.session_state.messages) > 1:
-            pdf_bytes = generate_pdf(st.session_state.messages)
-            st.download_button("📥 Download Notes", data=pdf_bytes, file_name="NEETx_Notes.pdf", mime="application/pdf", use_container_width=True)
-        
-        if st.button("Logout", use_container_width=True): 
-            st.session_state['logout'] = True
-            st.rerun()
+            // Fallback if no key or error
+            if (!apiKey) {
+                console.warn("No API Key found, using mock data.");
+                return new Promise(resolve => setTimeout(() => resolve(MOCK_FLASHCARDS.slice(0, count)), 1500));
+            }
 
-    # --- CONTACT US DROPDOWN ---
-    st.markdown("---")
-    with st.expander("📞 Contact Us"):
-        st.write("**Email:** neetxaipro@gmail.com")
-        st.write("**WhatsApp:** +91 9839940400")
-    
-    # --- TERMS & CONDITIONS DROPDOWN ---
-    with st.expander("📄 Terms & Conditions"):
-        st.markdown("""
-        **1. Medical Advice Disclaimer**
-        NEETx PRO is an educational tool for Physics, Chemistry, and Biology. It is NOT a medical device and should not be used for medical diagnosis.
-
-        **2. AI Accuracy**
-        While optimized for NCERT and NEET patterns, AI can make mistakes. Always verify critical data with your NCERT textbooks.
-
-        **3. Usage Policy**
-        For personal preparation use only. Sharing accounts is prohibited.
-        """, unsafe_allow_html=True)
-
-# --- 7. MAIN INTERFACE ---
-show_branding()
-
-# If not verified, show landing teaser and stop
-if not st.session_state.is_verified:
-    st.markdown("---")
-    st.markdown("""
-    <div style="background-color: #0A110A; padding: 25px; border-radius: 12px; border-left: 5px solid #2ECC71; text-align: center; margin-bottom: 30px;">
-        <h3 style="color: #FFFFFF; margin:0;">👋 Welcome to NEETx PRO</h3>
-        <p style="color: #AAAAAA; margin-top: 10px;">
-            The ultimate AI tool for NEET UG Aspirants.<br>
-            <strong>Use the Sidebar on the left to Register for FREE access!</strong>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # --- NEET SPECIALIZED FEATURES ---
-    c1, c2 = st.columns(2)
-    with c1:
-        st.info("**🧬 NCERT Biology Mastery**\n\nDeep understanding of every line of NCERT. We explain diagrams and theory instantly.")
-        st.info("**🧪 Organic & Inorganic Wizard**\n\nLearn reactions, exceptions, and mechanisms with clear steps.")
-        st.info("**🧘 Stress & Strategy**\n\nNot just studies—we help you manage exam pressure and build a winning mindset.")
-    with c2:
-        st.info("**👁️ Vision Intelligence**\n\nClick a photo of any diagram or question. We solve it instantly.")
-        st.info("**➗ Physics Simplified**\n\nStruggling with calculations? We break down numericals into simple steps.")
-        st.info("**⚡ Rank Dominance**\n\nStrategies used by Toppers to score 700+. Beat the competition.")
-    st.stop()
-
-# --- 8. CHAT LOGIC ---
-try:
-    # ------------------------------------------------------------------
-    # IMPORTANT: ADD YOUR KEYS TO .streamlit/secrets.toml for security!
-    # Or replace st.secrets calls below with the keys you provided.
-    # ------------------------------------------------------------------
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    assistant_id = st.secrets["ASSISTANT_ID"]
-except Exception as e:
-    st.error("🚨 System Error: OpenAI Keys missing. Please add them to secrets.toml")
-    st.stop()
-
-if "thread_id" not in st.session_state:
-    try:
-        thread = client.beta.threads.create()
-        st.session_state.thread_id = thread.id
-    except:
-        st.error("Connection error. Please refresh.")
-        st.stop()
-
-# Handle Audio Input
-audio_prompt = None
-if 'audio_value' in locals() and audio_value and not st.session_state.processing:
-    with st.spinner("🎧 Listening..."):
-        try:
-            transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_value, language="en")
-            audio_prompt = transcription.text
-        except:
-            pass
-
-# Handle Text Input
-text_prompt = st.chat_input("Ask a doubt (Biology, Phy, Chem)...", disabled=st.session_state.processing)
-prompt = audio_prompt if audio_prompt else text_prompt
-
-if prompt:
-    st.session_state.processing = True
-    msg_data = {"role": "user", "content": prompt}
-    
-    if st.session_state.current_uploaded_file:
-        uf = st.session_state.current_uploaded_file
-        msg_data.update({"file_data": uf.getvalue(), "file_name": getattr(uf, "name", "file"), "file_type": getattr(uf, "type", "")})
+            const prompt = `Generate ${count} flashcards for NEET (Indian Medical Entrance Exam).
+            Subject: ${subject}
+            Topics: ${chapters.join(', ')}
+            Difficulty: ${level}
             
-    st.session_state.messages.append(msg_data)
-    st.rerun()
+            Return ONLY a valid JSON array of objects. Each object must have exactly two keys: "front" (the question) and "back" (the answer).
+            Do not include markdown code blocks. Just the raw JSON string.`;
 
-# Display Messages
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar=LOGO_PATH if msg["role"]=="assistant" else "🧑‍⚕️"):
-        if "file_data" in msg:
-            if str(msg["file_type"]).startswith("image"): st.image(msg["file_data"], width=200)
-            else: st.markdown(f"📄 *{msg.get('file_name')}*")
-        st.markdown(clean_latex_for_chat(msg["content"]))
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
 
-# Generate Response
-if st.session_state.processing and st.session_state.messages[-1]["role"] == "user":
-    msg_text = st.session_state.messages[-1]["content"]
-    api_content = [{"type": "text", "text": msg_text}]
-    att = []
-    
-    # Handle File Attachment
-    uploaded_file_obj = st.session_state.current_uploaded_file
-    if uploaded_file_obj:
-        try:
-            tfile = f"temp_{getattr(uploaded_file_obj, 'name', 'file')}"
-            with open(tfile, "wb") as f: f.write(uploaded_file_obj.getbuffer())
-            fres = client.files.create(file=open(tfile, "rb"), purpose="assistants")
-            
-            if uploaded_file_obj.type == "application/pdf":
-                att.append({"file_id": fres.id, "tools": [{"type": "code_interpreter"}]})
-            else:
-                api_content.append({"type": "image_file", "image_file": {"file_id": fres.id}})
-            
-            try: os.remove(tfile)
-            except: pass
-        except:
-            pass 
-    
-    try:
-        client.beta.threads.messages.create(thread_id=st.session_state.thread_id, role="user", content=api_content, attachments=att if att else None)
-        
-        # --- NEET SPECIALIZED INSTRUCTIONS WITH HINGLISH & HIDDEN CODE ---
-        base_instructions = """
-        You are NEETx, an elite AI Tutor for NEET UG aspirants.
-        
-        ERROR_HANDLING_AND_SCOPE:
-        1. **STRICT DOMAIN BOUNDARY**: Your knowledge is strictly limited to Physics, Chemistry, and Biology relevant to NEET UG.
-        2. **IRRELEVANT TOPICS**: If the user asks about topics NOT related to NEET (e.g., general coding, politics, movies, cooking, dating, sports, general news):
-           - **Action**: Provide a VERY BRIEF (maximum 1 sentence) factual definition of the topic to be polite.
-           - **Pivot**: Immediately pivot back to NEET preparation, reminding them of the goal (White Coat/MBBS).
-           - **Redirect**: Ask a relevant question to bring them back.
-           - **Example**: User: "Who won the cricket match?" -> Bot: "India won the match. But Future Doctor, distractions won't get us to AIIMS. Let's focus on Genetics?"
-        
-        YOUR PERSONA:
-        - **Role:** Senior Medical Student Mentor.
-        - **Language:** **Hinglish** (Mix of English & Hindi). Use phrases like "Dekho future doctor," "Ye concept important hai," "Samjhe?".
-        - **Tone:** Encouraging, Disciplined, and Friendly.
-        
-        MANDATORY OPERATING RULES:
-        1. **SILENT CALCULATIONS (CRITICAL):** For Physics/Chemistry numericals, use the **Code Interpreter (Python)** tool to calculate.
-           - **NEVER** output the Python code, variable assignments (e.g. `L_orbital = ...`), or print statements to the user.
-           - **ONLY** show the formula in LaTeX, the values substituted, and the final answer.
-        
-        2. **BIOLOGY = NCERT:** Strictly stick to NCERT content. Quote lines.
-        
-        3. **FORMATTING:** Use LaTeX ($...$ for inline, $$...$$ for block) for all math/science.
-        
-        4. **SEARCH:** Use internal tools to find recent cutoffs/trends if asked.
-        
-        5. **MOTIVATION:** If they are wrong, say "Koi baat nahi, wapas try karte hain."
-        """
+                const data = await response.json();
+                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                // Clean up markdown if present
+                if (text.startsWith('```json')) text = text.replace('```json', '').replace('```', '');
+                if (text.startsWith('```')) text = text.replace('```', '').replace('```', '');
+                
+                return JSON.parse(text);
+            } catch (error) {
+                console.error("API Error:", error);
+                return MOCK_FLASHCARDS.slice(0, count);
+            }
+        };
 
-        # NEETx ULTIMATE INJECTION
-        if st.session_state.ultimate_mode:
-            base_instructions += """
-            \n\n*** ULTRA MODE ACTIVATED ***
-            The user has enabled 'NEETx Ultimate'. 
-            1. INCREASE COMPLEXITY: Assume the user is aiming for Rank 1 (720/720).
-            2. INTER-LINKING: Actively connect concepts (e.g., Genetics + Evolution, Electrostatics + Gravitation).
-            3. TRICKY QUESTIONS: Focus on assertion-reasoning and statement-based questions common in recent NEET exams.
-            4. TONE: Highly focused, rigorous, and demanding.
-            """
+        // --- Icons ---
+        const { MessageCircle, BookOpen, User, Settings, Zap, Send, ChevronDown, Check, RotateCw, X, BrainCircuit, GraduationCap, Layout, ChevronLeft, ChevronRight, Layers } = lucide;
 
-        # DEEP RESEARCH INJECTION
-        if st.session_state.deep_research_mode:
-            base_instructions += """
-            \n\n*** DEEP RESEARCH MODE ACTIVATED ***
-            1. EXPLAIN LIKE A SCIENTIST: The user wants deep theoretical understanding beyond rote memorization.
-            2. FIRST PRINCIPLES: Explain the 'why' behind biological mechanisms and physical laws.
-            3. DEPTH OVER BREADTH: Go deep into the underlying mechanisms.
-            """
-        
-        with st.chat_message("assistant", avatar=LOGO_PATH):
-            stream = client.beta.threads.runs.create(
-                thread_id=st.session_state.thread_id, assistant_id=assistant_id, stream=True,
-                additional_instructions=base_instructions,
-                tools=[{"type": "code_interpreter"}]
-            )
-            resp = st.empty()
-            full_text = ""
+        // --- Components ---
+
+        const MultiSelectDropdown = ({ options, selected, onChange, label }) => {
+            const [isOpen, setIsOpen] = React.useState(false);
+            const dropdownRef = React.useRef(null);
+
+            React.useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        setIsOpen(false);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+
+            const toggleOption = (option) => {
+                if (selected.includes(option)) {
+                    onChange(selected.filter(item => item !== option));
+                } else {
+                    onChange([...selected, option]);
+                }
+            };
+
+            return (
+                <div className="relative" ref={dropdownRef}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                    <div 
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-sm cursor-pointer flex justify-between items-center hover:border-emerald-500 transition-colors shadow-sm"
+                    >
+                        <span className={`truncate ${selected.length === 0 ? 'text-gray-400' : 'text-gray-800'}`}>
+                            {selected.length === 0 ? "Select Chapters..." : `${selected.length} Chapters Selected`}
+                        </span>
+                        <ChevronDown size={16} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </div>
+
+                    {isOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                            {options.map((option) => (
+                                <div 
+                                    key={option}
+                                    onClick={() => toggleOption(option)}
+                                    className="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
+                                >
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selected.includes(option) ? 'bg-emerald-600 border-emerald-600' : 'border-gray-400'}`}>
+                                        {selected.includes(option) && <Check size={10} className="text-white" />}
+                                    </div>
+                                    <span className="text-sm text-gray-700">{option}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const FlashcardViewer = ({ cards, onClose }) => {
+            const [currentIndex, setCurrentIndex] = React.useState(0);
+            const [isFlipped, setIsFlipped] = React.useState(false);
+
+            if (!cards || cards.length === 0) return null;
+
+            const nextCard = () => {
+                if (currentIndex < cards.length - 1) {
+                    setIsFlipped(false);
+                    setTimeout(() => setCurrentIndex(c => c + 1), 150);
+                }
+            };
+
+            const prevCard = () => {
+                if (currentIndex > 0) {
+                    setIsFlipped(false);
+                    setTimeout(() => setCurrentIndex(c => c - 1), 150);
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-2xl flex flex-col items-center">
+                        {/* Header */}
+                        <div className="w-full flex justify-between items-center mb-6 text-white">
+                            <div className="flex items-center gap-2">
+                                <Zap className="text-yellow-400 fill-yellow-400" size={24} />
+                                <span className="text-xl font-bold tracking-wide">Study Mode</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="bg-white/10 px-3 py-1 rounded-full text-sm font-medium">
+                                    {currentIndex + 1} / {cards.length}
+                                </span>
+                                <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Card Scene */}
+                        <div className="w-full aspect-[3/2] perspective-1000 group cursor-pointer" onClick={() => setIsFlipped(!isFlipped)}>
+                            <div className={`relative w-full h-full duration-500 transform-style-3d transition-transform ${isFlipped ? 'rotate-y-180' : ''}`}>
+                                
+                                {/* Front */}
+                                <div className="absolute w-full h-full bg-white rounded-2xl shadow-2xl backface-hidden flex flex-col items-center justify-center p-8 text-center border-b-4 border-emerald-500">
+                                    <span className="absolute top-6 left-6 text-xs font-bold text-emerald-600 uppercase tracking-widest bg-emerald-100 px-3 py-1 rounded-full">Question</span>
+                                    <p className="text-2xl md:text-3xl text-gray-800 font-medium leading-relaxed">
+                                        {cards[currentIndex].front}
+                                    </p>
+                                    <div className="absolute bottom-6 text-gray-400 text-sm flex items-center gap-2">
+                                        <RotateCw size={14} /> Click to flip
+                                    </div>
+                                </div>
+
+                                {/* Back */}
+                                <div className="absolute w-full h-full bg-emerald-600 rounded-2xl shadow-2xl backface-hidden rotate-y-180 flex flex-col items-center justify-center p-8 text-center text-white">
+                                    <span className="absolute top-6 left-6 text-xs font-bold text-emerald-100 uppercase tracking-widest bg-emerald-700/50 px-3 py-1 rounded-full">Answer</span>
+                                    <p className="text-xl md:text-2xl font-medium leading-relaxed">
+                                        {cards[currentIndex].back}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex items-center gap-6 mt-8">
+                            <button 
+                                onClick={prevCard} 
+                                disabled={currentIndex === 0}
+                                className="p-4 rounded-full bg-white text-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-50 hover:scale-110 transition-all shadow-lg"
+                            >
+                                <ChevronLeft size={24} />
+                            </button>
+                            <div className="text-white/80 text-sm font-medium">Use arrows to navigate</div>
+                            <button 
+                                onClick={nextCard} 
+                                disabled={currentIndex === cards.length - 1}
+                                className="p-4 rounded-full bg-white text-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-50 hover:scale-110 transition-all shadow-lg"
+                            >
+                                <ChevronRight size={24} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const FlashcardGeneratorModal = ({ isOpen, onClose, onGenerate }) => {
+            const [subject, setSubject] = React.useState('Physics');
+            const [selectedChapters, setSelectedChapters] = React.useState([]);
+            const [level, setLevel] = React.useState('Medium');
+            const [quantity, setQuantity] = React.useState(5);
+            const [isGenerating, setIsGenerating] = React.useState(false);
+
+            if (!isOpen) return null;
+
+            const handleSubjectChange = (e) => {
+                setSubject(e.target.value);
+                setSelectedChapters([]); // Reset chapters when subject changes
+            };
+
+            const handleGenerate = async () => {
+                if (selectedChapters.length === 0) {
+                    alert("Please select at least one chapter.");
+                    return;
+                }
+                setIsGenerating(true);
+                await onGenerate(subject, selectedChapters, level, quantity);
+                setIsGenerating(false);
+            };
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="px-6 py-5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-md">
+                                    <BrainCircuit size={20} className="text-white" />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold">AI Flashcards</h2>
+                                    <p className="text-emerald-100 text-xs">Generate custom study material instantly</p>
+                                </div>
+                            </div>
+                            <button onClick={onClose} className="text-white/80 hover:text-white transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-5 overflow-y-auto">
+                            {/* Subject Select */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                                <select 
+                                    value={subject} 
+                                    onChange={handleSubjectChange}
+                                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all outline-none appearance-none"
+                                >
+                                    {Object.keys(NEET_SYLLABUS).map(sub => (
+                                        <option key={sub} value={sub}>{sub}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Chapter Select (Custom Multi-select) */}
+                            <MultiSelectDropdown 
+                                label="Chapters / Sub-topics" 
+                                options={NEET_SYLLABUS[subject]} 
+                                selected={selectedChapters} 
+                                onChange={setSelectedChapters} 
+                            />
+
+                            {/* Difficulty & Quantity Grid */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
+                                    <div className="flex bg-gray-100 p-1 rounded-lg">
+                                        {['Easy', 'Medium', 'Hard'].map((l) => (
+                                            <button
+                                                key={l}
+                                                onClick={() => setLevel(l)}
+                                                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                                    level === l ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                            >
+                                                {l}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden bg-white">
+                                        <button 
+                                            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                                            className="px-3 py-2 bg-gray-50 border-r hover:bg-gray-100 text-gray-600"
+                                        >-</button>
+                                        <div className="flex-1 text-center text-sm font-medium text-gray-800">{quantity} Cards</div>
+                                        <button 
+                                            onClick={() => setQuantity(Math.min(20, quantity + 1))}
+                                            className="px-3 py-2 bg-gray-50 border-l hover:bg-gray-100 text-gray-600"
+                                        >+</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 pt-2 bg-white">
+                            <button 
+                                onClick={handleGenerate} 
+                                disabled={isGenerating}
+                                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-xl shadow-lg shadow-emerald-200 transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                            >
+                                {isGenerating ? (
+                                    <>
+                                        <div className="loader border-white/30 border-t-white w-5 h-5"></div>
+                                        <span>Designing Cards...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Zap size={18} />
+                                        <span>Generate Flashcards</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ChatInterface = () => {
+            const [messages, setMessages] = React.useState([
+                { id: 1, sender: 'bot', text: "Hello! I'm your NEETx AI Assistant. How can I help you with your preparation today?" }
+            ]);
+            const [inputText, setInputText] = React.useState("");
+            const [showFlashcardModal, setShowFlashcardModal] = React.useState(false);
+            const [generatedCards, setGeneratedCards] = React.useState(null);
             
-            for event in stream:
-                if event.event == "thread.message.delta":
-                    for c in event.data.delta.content:
-                        if c.type == "text":
-                            full_text += c.text.value
-                            resp.markdown(clean_latex_for_chat(full_text) + "▌")
-            
-            resp.markdown(clean_latex_for_chat(full_text))
-            st.session_state.messages.append({"role": "assistant", "content": full_text})
-            
-    except Exception as e:
-        st.session_state.messages.append({"role": "assistant", "content": "⚠️ Network issue. Please try again."})
-    
-    st.session_state.current_uploaded_file = None
-    st.session_state.uploader_key += 1
-    if 'audio_value' in locals() and audio_value: st.session_state.audio_key += 1
-    st.session_state.processing = False
-    st.rerun()
+            const chatEndRef = React.useRef(null);
+
+            React.useEffect(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, [messages]);
+
+            const handleSend = () => {
+                if (!inputText.trim()) return;
+                
+                const newMsg = { id: Date.now(), sender: 'user', text: inputText };
+                setMessages(prev => [...prev, newMsg]);
+                setInputText("");
+
+                // Mock bot response
+                setTimeout(() => {
+                    const botMsg = { id: Date.now() + 1, sender: 'bot', text: "I've received your query. Is there anything specific from the syllabus you'd like to explore?" };
+                    setMessages(prev => [...prev, botMsg]);
+                }, 1000);
+            };
+
+            const handleGenerateFlashcards = async (subject, chapters, level, count) => {
+                // Generate cards
+                const cards = await generateGeminiFlashcards(subject, chapters, level, count);
+                setShowFlashcardModal(false);
+                setGeneratedCards(cards);
+                
+                // Add a message about it
+                setMessages(prev => [...prev, { 
+                    id: Date.now(), 
+                    sender: 'bot', 
+                    text: `I've generated ${count} ${level} flashcards for ${subject} (${chapters.length} topics).`,
+                    isSystem: true
+                }]);
+            };
+
+            return (
+                <div className="flex-1 flex flex-col h-full bg-slate-50 relative overflow-hidden">
+                    {/* Header */}
+                    <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                                AI Study Assistant
+                            </h2>
+                            <p className="text-sm text-gray-500">Online | NEET Expert Model</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
+                                <Settings size={20} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Messages Area */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                        {messages.map((msg) => (
+                            <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[80%] rounded-2xl px-5 py-3 shadow-sm ${
+                                    msg.sender === 'user' 
+                                        ? 'bg-emerald-600 text-white rounded-br-none' 
+                                        : 'bg-white border border-gray-100 text-gray-700 rounded-bl-none'
+                                }`}>
+                                    <p className="leading-relaxed text-sm md:text-base">{msg.text}</p>
+                                </div>
+                            </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Input Area & Tools */}
+                    <div className="p-4 bg-white border-t border-gray-200 z-20">
+                        {/* Quick Tools */}
+                        <div className="flex gap-2 mb-3 overflow-x-auto pb-2 scrollbar-hide">
+                            <button 
+                                onClick={() => setShowFlashcardModal(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-50 to-emerald-50 text-emerald-700 rounded-full border border-emerald-200 hover:border-emerald-400 hover:shadow-md transition-all text-sm font-medium whitespace-nowrap group"
+                            >
+                                <div className="bg-white p-1 rounded-full shadow-sm group-hover:scale-110 transition-transform">
+                                    <Zap size={14} className="fill-emerald-500 text-emerald-500" />
+                                </div>
+                                AI Flashcards
+                            </button>
+                             <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-600 rounded-full border border-gray-200 hover:bg-gray-100 transition-all text-sm font-medium whitespace-nowrap">
+                                <Layout size={14} /> Summarize
+                            </button>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-600 rounded-full border border-gray-200 hover:bg-gray-100 transition-all text-sm font-medium whitespace-nowrap">
+                                <BookOpen size={14} /> Quiz Me
+                            </button>
+                        </div>
+
+                        {/* Input Box */}
+                        <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-4 py-2 border border-transparent focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100 transition-all">
+                            <input 
+                                type="text" 
+                                className="flex-1 bg-transparent border-none outline-none text-gray-700 placeholder-gray-400 py-2"
+                                placeholder="Ask a doubt or request a topic..."
+                                value={inputText}
+                                onChange={(e) => setInputText(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            />
+                            <button 
+                                onClick={handleSend}
+                                className={`p-2 rounded-lg transition-all ${inputText.trim() ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-gray-200 text-gray-400'}`}
+                            >
+                                <Send size={18} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Modals */}
+                    <FlashcardGeneratorModal 
+                        isOpen={showFlashcardModal} 
+                        onClose={() => setShowFlashcardModal(false)} 
+                        onGenerate={handleGenerateFlashcards}
+                    />
+
+                    {generatedCards && (
+                        <FlashcardViewer 
+                            cards={generatedCards} 
+                            onClose={() => setGeneratedCards(null)} 
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const Sidebar = () => {
+            const menuItems = [
+                { icon: Layout, label: 'Dashboard', active: false },
+                { icon: MessageCircle, label: 'AI Chat', active: true },
+                { icon: BookOpen, label: 'Courses', active: false },
+                { icon: Layers, label: 'Practice', active: false },
+                { icon: GraduationCap, label: 'Mock Tests', active: false },
+            ];
+
+            return (
+                <div className="w-20 md:w-64 bg-white border-r border-gray-200 flex flex-col justify-between h-full hidden md:flex">
+                    <div>
+                        <div className="p-6 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-200">
+                                N
+                            </div>
+                            <span className="text-2xl font-bold bg-gradient-to-r from-emerald-800 to-teal-600 bg-clip-text text-transparent hidden md:block">
+                                NEETx
+                            </span>
+                        </div>
+
+                        <nav className="mt-6 px-4 space-y-1">
+                            {menuItems.map((item, idx) => (
+                                <a 
+                                    key={idx}
+                                    href="#" 
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                                        item.active 
+                                            ? 'bg-emerald-50 text-emerald-700 font-medium' 
+                                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                    }`}
+                                >
+                                    <item.icon size={20} />
+                                    <span className="hidden md:block">{item.label}</span>
+                                </a>
+                            ))}
+                        </nav>
+                    </div>
+
+                    <div className="p-4 border-t border-gray-100">
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer">
+                            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">
+                                S
+                            </div>
+                            <div className="hidden md:block overflow-hidden">
+                                <p className="text-sm font-medium text-gray-700 truncate">Student User</p>
+                                <p className="text-xs text-gray-500 truncate">Pro Plan</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            return (
+                <div className="flex h-screen w-full bg-white overflow-hidden">
+                    <Sidebar />
+                    <ChatInterface />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
