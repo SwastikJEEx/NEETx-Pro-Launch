@@ -10,7 +10,8 @@ import traceback
 import logging
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="centered", initial_sidebar_state="expanded")
+# CHANGED: layout="wide" for wider chat area
+st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="wide", initial_sidebar_state="expanded")
 
 # *** EMAIL SETTINGS ***
 # using FormSubmit, emails will be sent TO this address
@@ -32,6 +33,11 @@ if "current_uploaded_file" not in st.session_state: st.session_state.current_upl
 if "is_verified" not in st.session_state: st.session_state.is_verified = False
 if "user_details" not in st.session_state: st.session_state.user_details = {}
 
+# MODE STATES
+# We initialize this key in session state for the toggle to bind to it
+if "ultimate_mode" not in st.session_state: st.session_state.ultimate_mode = False
+if "deep_research_mode" not in st.session_state: st.session_state.deep_research_mode = False
+
 # Simple logger
 logger = logging.getLogger("neetx")
 logger.setLevel(logging.INFO)
@@ -50,6 +56,12 @@ st.markdown("""
     /* Text Colors */
     h1, h2, h3, h4, h5, h6, p, li, div, span, label, a, small, strong, code { color: #E0E0E0 !important; }
     strong { color: #2ECC71 !important; font-weight: 600; } /* Neon Green Strong Text */
+
+    /* BIGGER CHAT TEXT FOR READABILITY */
+    .stChatMessage p, .stChatMessage li, .stChatMessage div {
+        font-size: 1.15rem !important;
+        line-height: 1.6 !important;
+    }
     
     /* Inputs & Selects - Green Borders */
     div[data-baseweb="input"], div[data-baseweb="select"], div[data-baseweb="base-input"] {
@@ -84,7 +96,7 @@ st.markdown("""
     /* Spinner/Loader Color */
     .stSpinner > div > div { border-top-color: #2ECC71 !important; }
 
-    .block-container { padding-top: 1rem; padding-bottom: 140px; }
+    .block-container { padding-top: 1rem; padding-bottom: 140px; max-width: 1200px; margin: 0 auto; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -139,21 +151,22 @@ def clean_latex_for_chat(text):
     return text
 
 def show_branding():
-    c1, c2, c3 = st.columns([1, 2, 1])
+    # Adjusted columns for wide layout to keep logo centered
+    c1, c2, c3 = st.columns([2, 2, 2])
     with c2:
         try:
             # Display Logo from local file
-            st.image(LOGO_PATH, width=280)
+            st.image(LOGO_PATH, use_container_width=True)
         except: 
             # Fallback
             st.markdown(f"**NEETx PRO**")
 
     st.markdown("""
         <div style="text-align: center; margin-top: -15px; margin-bottom: 30px;">
-            <h1 style="margin: 0; font-size: 42px; font-weight: 700; letter-spacing: 1px;">
+            <h1 style="margin: 0; font-size: 52px; font-weight: 700; letter-spacing: 1px;">
                 NEETx <span style="color:#2ECC71;">PRO</span>
             </h1>
-            <p style="color: #AAAAAA; font-size: 15px; margin-top: 8px;">
+            <p style="color: #AAAAAA; font-size: 18px; margin-top: 8px;">
                 Your AI Biology, Physics & Chem Tutor | <strong>Target 720/720</strong> 🩺
             </p>
         </div>
@@ -172,8 +185,8 @@ class PDF(FPDF):
     def chapter_body(self, body):
         self.set_font('Arial', '', 11)
         self.set_text_color(50, 50, 50)
-        clean = cleanup_text_for_pdf(body)
-        clean = clean.encode('latin-1', 'replace').decode('latin-1')
+        self.clean = cleanup_text_for_pdf(body)
+        clean = self.clean.encode('latin-1', 'replace').decode('latin-1')
         self.multi_cell(0, 7, clean)
         self.ln()
 
@@ -209,7 +222,7 @@ with st.sidebar:
                     send_lead_notification(name, email, phone)
                     st.session_state.user_details = {"name": name, "email": email}
                     st.session_state.is_verified = True
-                    st.success("✅ Success! Welcome Future Doctor.")
+                    st.toast(f"Welcome, {name}! Let's study.", icon="🚀")
                     time.sleep(1)
                     st.rerun()
             else:
@@ -220,6 +233,46 @@ with st.sidebar:
         st.markdown(f"👤 **{st.session_state.user_details.get('name', 'Doctor')}**")
         st.success("✅ NEETx Pro Active")
         st.markdown("---")
+        
+        # --- NEW FEATURES: NEETX ULTIMATE & TOOLS ---
+        st.markdown("### ⚡ Power Tools")
+        
+        # 1. NEETx Ultimate Toggle
+        # Using key='ultimate_mode' automatically syncs with session_state, fixing the 2-click bug.
+        st.toggle("🔥 NEETx Ultimate", key="ultimate_mode", help="Unlock advanced problem solving and deep conceptual analysis.")
+        
+        if st.session_state.ultimate_mode:
+            st.caption("🚀 Advanced Mode: ON")
+        
+        # 2. Tools Buttons (Layout in columns)
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            if st.button("📚 Formulas", use_container_width=True):
+                 st.toast("Formula Sheet Mode: Ask for any chapter!", icon="📐")
+                 st.session_state.messages.append({"role": "assistant", "content": "I'm ready! Which chapter's **Formula Sheet** do you need? (e.g., Electrostatics, Genetics)"})
+                 st.rerun()
+        with col_t2:
+            if st.button("📝 Mock Test", use_container_width=True):
+                st.toast("Mock Test Initialized...", icon="⏳")
+                st.session_state.messages.append({"role": "assistant", "content": "Let's test your prep! 🎯 Topic batao, I'll generate a **Mini Mock Test** with 5 tough questions."})
+                st.rerun()
+        
+        # 3. Deep Research Toggle (Full width below others)
+        st.toggle("🔬 Deep Research", key="deep_research_mode", help="Enable deep theoretical explanations and first-principles derivations.")
+        
+        if st.session_state.deep_research_mode:
+            st.caption("🧐 Research Mode: ON")
+
+        st.markdown("---")
+
+        # --- SESSION CONTROLS ---
+        if st.button("✨ New Session", use_container_width=True):
+            st.session_state.messages = [{"role": "assistant", "content": "Fresh start! 🌟 What topic shall we tackle now?"}]
+            # Reset thread ID to force a new context (if you want fresh context)
+            if "thread_id" in st.session_state:
+                del st.session_state.thread_id
+            st.toast("Chat history cleared!", icon="🧹")
+            st.rerun()
         
         st.markdown("**📎 Attach Question**")
         
@@ -247,9 +300,9 @@ with st.sidebar:
         
         if len(st.session_state.messages) > 1:
             pdf_bytes = generate_pdf(st.session_state.messages)
-            st.download_button("📥 Download Notes", data=pdf_bytes, file_name="NEETx_Notes.pdf", mime="application/pdf")
+            st.download_button("📥 Download Notes", data=pdf_bytes, file_name="NEETx_Notes.pdf", mime="application/pdf", use_container_width=True)
         
-        if st.button("Logout"): 
+        if st.button("Logout", use_container_width=True): 
             st.session_state['logout'] = True
             st.rerun()
 
@@ -381,11 +434,19 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
         client.beta.threads.messages.create(thread_id=st.session_state.thread_id, role="user", content=api_content, attachments=att if att else None)
         
         # --- NEET SPECIALIZED INSTRUCTIONS WITH HINGLISH & HIDDEN CODE ---
-        INSTRUCTIONS = """
+        base_instructions = """
         You are NEETx, an elite AI Tutor for NEET UG aspirants.
         
+        ERROR_HANDLING_AND_SCOPE:
+        1. **STRICT DOMAIN BOUNDARY**: Your knowledge is strictly limited to Physics, Chemistry, and Biology relevant to NEET UG.
+        2. **IRRELEVANT TOPICS**: If the user asks about topics NOT related to NEET (e.g., general coding, politics, movies, cooking, dating, sports, general news):
+           - **Action**: Provide a VERY BRIEF (maximum 1 sentence) factual definition of the topic to be polite.
+           - **Pivot**: Immediately pivot back to NEET preparation, reminding them of the goal (White Coat/MBBS).
+           - **Redirect**: Ask a relevant question to bring them back.
+           - **Example**: User: "Who won the cricket match?" -> Bot: "India won the match. But Future Doctor, distractions won't get us to AIIMS. Let's focus on Genetics?"
+        
         YOUR PERSONA:
-        - **Role:** Senior Medical Student Mentor .
+        - **Role:** Senior Medical Student Mentor.
         - **Language:** **Hinglish** (Mix of English & Hindi). Use phrases like "Dekho future doctor," "Ye concept important hai," "Samjhe?".
         - **Tone:** Encouraging, Disciplined, and Friendly.
         
@@ -402,11 +463,31 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
         
         5. **MOTIVATION:** If they are wrong, say "Koi baat nahi, wapas try karte hain."
         """
+
+        # NEETx ULTIMATE INJECTION
+        if st.session_state.ultimate_mode:
+            base_instructions += """
+            \n\n*** ULTRA MODE ACTIVATED ***
+            The user has enabled 'NEETx Ultimate'. 
+            1. INCREASE COMPLEXITY: Assume the user is aiming for Rank 1 (720/720).
+            2. INTER-LINKING: Actively connect concepts (e.g., Genetics + Evolution, Electrostatics + Gravitation).
+            3. TRICKY QUESTIONS: Focus on assertion-reasoning and statement-based questions common in recent NEET exams.
+            4. TONE: Highly focused, rigorous, and demanding.
+            """
+
+        # DEEP RESEARCH INJECTION
+        if st.session_state.deep_research_mode:
+            base_instructions += """
+            \n\n*** DEEP RESEARCH MODE ACTIVATED ***
+            1. EXPLAIN LIKE A SCIENTIST: The user wants deep theoretical understanding beyond rote memorization.
+            2. FIRST PRINCIPLES: Explain the 'why' behind biological mechanisms and physical laws.
+            3. DEPTH OVER BREADTH: Go deep into the underlying mechanisms.
+            """
         
         with st.chat_message("assistant", avatar=LOGO_PATH):
             stream = client.beta.threads.runs.create(
                 thread_id=st.session_state.thread_id, assistant_id=assistant_id, stream=True,
-                additional_instructions=INSTRUCTIONS,
+                additional_instructions=base_instructions,
                 tools=[{"type": "code_interpreter"}]
             )
             resp = st.empty()
@@ -430,4 +511,3 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
     if 'audio_value' in locals() and audio_value: st.session_state.audio_key += 1
     st.session_state.processing = False
     st.rerun()
-
