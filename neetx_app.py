@@ -63,6 +63,15 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
+        /* Animations */
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-scale {
+            animation: fadeInScale 0.2s ease-out forwards;
+        }
+        
         /* Loader */
         .loader {
             border: 3px solid #f3f3f3;
@@ -158,7 +167,7 @@
         };
 
         // --- Icons ---
-        const { MessageCircle, BookOpen, User, Settings, Zap, Send, ChevronDown, Check, RotateCw, X, BrainCircuit, GraduationCap, Layout, ChevronLeft, ChevronRight, Layers } = lucide;
+        const { MessageCircle, BookOpen, User, Settings, Zap, Send, ChevronDown, Check, RotateCw, X, BrainCircuit, GraduationCap, Layout, ChevronLeft, ChevronRight, Layers, Copy } = lucide;
 
         // --- Components ---
 
@@ -184,6 +193,14 @@
                 }
             };
 
+            const toggleAll = () => {
+                if (selected.length === options.length) {
+                    onChange([]);
+                } else {
+                    onChange([...options]);
+                }
+            };
+
             return (
                 <div className="relative" ref={dropdownRef}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
@@ -198,19 +215,30 @@
                     </div>
 
                     {isOpen && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                            {options.map((option) => (
-                                <div 
-                                    key={option}
-                                    onClick={() => toggleOption(option)}
-                                    className="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-hidden flex flex-col">
+                             <div className="p-2 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0 z-10">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-2">Options</span>
+                                <button 
+                                    onClick={toggleAll}
+                                    className="text-xs text-emerald-600 font-medium hover:text-emerald-800 px-2 py-1 rounded hover:bg-emerald-100 transition-colors"
                                 >
-                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selected.includes(option) ? 'bg-emerald-600 border-emerald-600' : 'border-gray-400'}`}>
-                                        {selected.includes(option) && <Check size={10} className="text-white" />}
+                                    {selected.length === options.length ? 'Deselect All' : 'Select All'}
+                                </button>
+                            </div>
+                            <div className="overflow-y-auto">
+                                {options.map((option) => (
+                                    <div 
+                                        key={option}
+                                        onClick={() => toggleOption(option)}
+                                        className="px-4 py-2.5 hover:bg-emerald-50 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
+                                    >
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selected.includes(option) ? 'bg-emerald-600 border-emerald-600' : 'border-gray-400'}`}>
+                                            {selected.includes(option) && <Check size={10} className="text-white" />}
+                                        </div>
+                                        <span className="text-sm text-gray-700">{option}</span>
                                     </div>
-                                    <span className="text-sm text-gray-700">{option}</span>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -238,7 +266,7 @@
             };
 
             return (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-scale">
                     <div className="w-full max-w-2xl flex flex-col items-center">
                         {/* Header */}
                         <div className="w-full flex justify-between items-center mb-6 text-white">
@@ -329,7 +357,7 @@
             };
 
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-scale">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                         {/* Header */}
                         <div className="px-6 py-5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex justify-between items-center">
