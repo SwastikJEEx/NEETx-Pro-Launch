@@ -1,273 +1,288 @@
-cards = json.loads(content)
-                            st.session_state.flashcards = cards
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Generation failed: {e}")
+import streamlit as st
+import random
+import time
 
-        if st.button("⚡ AI Flashcards", use_container_width=True):
-            flashcard_generator_dialog()
-        # ----------------------------------------------------
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="NeetX Pro | NEET Prep Companion",
+    page_icon="🧬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-        # 3. Deep Research Toggle (Full width below others)
-        st.toggle("🔬 Deep Research", key="deep_research_mode", help="Enable deep theoretical explanations and first-principles derivations.")
-        
-        if st.session_state.deep_research_mode:
-            st.caption("🧐 Research Mode: ON")
+# --- Custom CSS for Styling ---
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #4CAF50;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        font-size: 1.5rem;
+        color: #333;
+        margin-top: 1rem;
+    }
+    .card {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
+        height: 3em;
+    }
+    .correct {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .incorrect {
+        color: #dc3545;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-        st.markdown("---")
+# --- Data: Flashcards & Questions ---
+BIOLOGY_CARDS = [
+    {"q": "What is the powerhouse of the cell?", "a": "Mitochondria"},
+    {"q": "What is the basic unit of classification?", "a": "Species"},
+    {"q": "Which hormone controls blood sugar levels?", "a": "Insulin"},
+    {"q": "What is the fluid mosaic model related to?", "a": "Plasma Membrane structure"},
+    {"q": "Where does Glycolysis occur?", "a": "Cytoplasm"},
+]
 
-        # --- SESSION CONTROLS ---
-        if st.button("✨ New Session", use_container_width=True):
-            st.session_state.messages = [{"role": "assistant", "content": "Fresh start! 🌟 What topic shall we tackle now?"}]
-            if "thread_id" in st.session_state:
-                del st.session_state.thread_id
-            st.toast("Chat history cleared!", icon="🧹")
-            st.session_state.flashcards = None
-            st.rerun()
-        
-        st.markdown("**📎 Attach Question**")
-        
-        # File Uploader Logic
-        if st.session_state.processing:
-            if st.session_state.current_uploaded_file:
-                st.markdown("**Attachment (locked):**")
-                st.markdown(f"📄 *{getattr(st.session_state.current_uploaded_file, 'name', 'file')}*")
-            else:
-                st.markdown("_Locked while answering._")
-        else:
-            uploaded_file = st.file_uploader("Upload", type=["jpg", "png", "pdf"], key=f"uploader_{st.session_state.uploader_key}", label_visibility="collapsed")
-            if uploaded_file:
-                st.session_state.current_uploaded_file = uploaded_file
-            
-            if st.session_state.current_uploaded_file:
-                if st.button("Remove attachment"):
-                    st.session_state.current_uploaded_file = None
-                    st.session_state.uploader_key += 1
-                    st.rerun()
-        
-        st.markdown("**🎙️ Voice Chat**")
-        audio_value = st.audio_input("Speak", key=f"audio_{st.session_state.audio_key}", label_visibility="collapsed")
-        st.markdown("---")
-        
-        if len(st.session_state.messages) > 1:
-            pdf_bytes = generate_pdf(st.session_state.messages)
-            st.download_button("📥 Download Notes", data=pdf_bytes, file_name="NEETx_Notes.pdf", mime="application/pdf", use_container_width=True)
-        
-        if st.button("Logout", use_container_width=True): 
-            st.session_state['logout'] = True
-            st.rerun()
+PHYSICS_CARDS = [
+    {"q": "What is the SI unit of Capacitance?", "a": "Farad"},
+    {"q": "Formula for Kinetic Energy?", "a": "1/2 mv²"},
+    {"q": "What implies constant velocity?", "a": "Zero Net Force"},
+    {"q": "Value of acceleration due to gravity (g)?", "a": "9.8 m/s²"},
+    {"q": "What type of lens corrects Myopia?", "a": "Concave Lens"},
+]
 
-    # --- CONTACT US DROPDOWN ---
-    st.markdown("---")
-    with st.expander("📞 Contact Us"):
-        st.write("**Email:** neetxaipro@gmail.com")
-        st.write("**WhatsApp:** +91 9839940400")
+CHEMISTRY_CARDS = [
+    {"q": "What is the pH of pure water?", "a": "7"},
+    {"q": "What is the shape of the methane molecule?", "a": "Tetrahedral"},
+    {"q": "Which law relates pressure and volume?", "a": "Boyle's Law"},
+    {"q": "Chemical formula for laughing gas?", "a": "N₂O (Nitrous Oxide)"},
+    {"q": "What is the oxidation state of O in H₂O₂?", "a": "-1"},
+]
+
+QUIZ_DATA = [
+    {
+        "question": "Which of the following is not a pyrimidine base?",
+        "options": ["Cytosine", "Thymine", "Uracil", "Guanine"],
+        "answer": "Guanine",
+        "subject": "Biology"
+    },
+    {
+        "question": "The dimension of Planck's constant is same as that of:",
+        "options": ["Energy", "Momentum", "Angular Momentum", "Power"],
+        "answer": "Angular Momentum",
+        "subject": "Physics"
+    },
+    {
+        "question": "Which element has the highest electronegativity?",
+        "options": ["Chlorine", "Fluorine", "Oxygen", "Nitrogen"],
+        "answer": "Fluorine",
+        "subject": "Chemistry"
+    },
+    {
+        "question": "In human body, which organ is responsible for filtration of blood?",
+        "options": ["Heart", "Lungs", "Kidney", "Liver"],
+        "answer": "Kidney",
+        "subject": "Biology"
+    }
+]
+
+# --- Session State Initialization ---
+if 'flashcards' not in st.session_state:
+    st.session_state.flashcards = BIOLOGY_CARDS + PHYSICS_CARDS + CHEMISTRY_CARDS
+if 'current_card_index' not in st.session_state:
+    st.session_state.current_card_index = 0
+if 'show_answer' not in st.session_state:
+    st.session_state.show_answer = False
+if 'quiz_score' not in st.session_state:
+    st.session_state.quiz_score = 0
+if 'quiz_index' not in st.session_state:
+    st.session_state.quiz_index = 0
+if 'quiz_finished' not in st.session_state:
+    st.session_state.quiz_finished = False
+
+# --- Helper Functions ---
+def next_card():
+    st.session_state.current_card_index = (st.session_state.current_card_index + 1) % len(st.session_state.flashcards)
+    st.session_state.show_answer = False
+
+def prev_card():
+    st.session_state.current_card_index = (st.session_state.current_card_index - 1) % len(st.session_state.flashcards)
+    st.session_state.show_answer = False
+
+def toggle_answer():
+    st.session_state.show_answer = not st.session_state.show_answer
+
+def shuffle_cards():
+    random.shuffle(st.session_state.flashcards)
+    st.session_state.current_card_index = 0
+    st.session_state.show_answer = False
+
+def check_answer(selected_option, correct_option):
+    if selected_option == correct_option:
+        st.session_state.quiz_score += 1
+        st.success("Correct! ✅")
+    else:
+        st.error(f"Wrong ❌. The correct answer was: {correct_option}")
     
-    # --- TERMS & CONDITIONS DROPDOWN ---
-    with st.expander("📄 Terms & Conditions"):
-        st.markdown("""
-        **1. Medical Advice Disclaimer**
-        NEETx PRO is an educational tool for Physics, Chemistry, and Biology. It is NOT a medical device and should not be used for medical diagnosis.
+    time.sleep(1) # Pause to let user see result
+    
+    if st.session_state.quiz_index < len(QUIZ_DATA) - 1:
+        st.session_state.quiz_index += 1
+    else:
+        st.session_state.quiz_finished = True
+    st.rerun()
 
-        **2. AI Accuracy**
-        While optimized for NCERT and NEET patterns, AI can make mistakes. Always verify critical data with your NCERT textbooks.
+def restart_quiz():
+    st.session_state.quiz_score = 0
+    st.session_state.quiz_index = 0
+    st.session_state.quiz_finished = False
+    random.shuffle(QUIZ_DATA) # Shuffle questions for new attempt
+    st.rerun()
 
-        **3. Usage Policy**
-        For personal preparation use only. Sharing accounts is prohibited.
+# --- Main App Layout ---
+
+# Sidebar Navigation
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3062/3062634.png", width=80)
+    st.title("NeetX Pro")
+    menu = st.radio("Navigation", ["Dashboard", "Flashcards", "Mock Quiz", "About"])
+    
+    st.markdown("---")
+    st.info("💡 **Tip:** Consistency is key to cracking NEET!")
+
+# Page Content
+if menu == "Dashboard":
+    st.markdown('<div class="main-header">Welcome to NeetX Pro 🚀</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(label="Days to Exam", value="145", delta="-1 day")
+    with col2:
+        st.metric(label="Topics Covered", value="12/90", delta="2 this week")
+    with col3:
+        st.metric(label="Avg Quiz Score", value="85%", delta="+5%")
+    
+    st.markdown("### 📚 Subject Focus Today")
+    tab1, tab2, tab3 = st.tabs(["Biology", "Physics", "Chemistry"])
+    
+    with tab1:
+        st.markdown("**Focus:** Human Physiology")
+        st.progress(65)
+    with tab2:
+        st.markdown("**Focus:** Optics")
+        st.progress(30)
+    with tab3:
+        st.markdown("**Focus:** Organic Chemistry")
+        st.progress(45)
+
+elif menu == "Flashcards":
+    st.markdown('<div class="main-header">⚡ Rapid Fire Flashcards</div>', unsafe_allow_html=True)
+    
+    # Filter selection
+    subject_filter = st.selectbox("Select Subject Deck", ["All", "Biology", "Physics", "Chemistry"])
+    
+    # Update deck based on selection (Temporary logic for display)
+    if subject_filter == "Biology":
+        current_deck = BIOLOGY_CARDS
+    elif subject_filter == "Physics":
+        current_deck = PHYSICS_CARDS
+    elif subject_filter == "Chemistry":
+        current_deck = CHEMISTRY_CARDS
+    else:
+        current_deck = st.session_state.flashcards
+
+    # Note: We track index globally, but if deck changes size, we need to be safe
+    if st.session_state.current_card_index >= len(current_deck):
+        st.session_state.current_card_index = 0
+        
+    card = current_deck[st.session_state.current_card_index]
+    
+    # Card Display UI
+    col_spacer_l, col_card, col_spacer_r = st.columns([1, 2, 1])
+    
+    with col_card:
+        st.markdown(f"""
+        <div class="card">
+            <h3>Card {st.session_state.current_card_index + 1} / {len(current_deck)}</h3>
+            <hr>
+            <h2 style="color: #2c3e50;">{card['q']}</h2>
+        </div>
         """, unsafe_allow_html=True)
+        
+        if st.session_state.show_answer:
+            st.markdown(f"""
+            <div class="card" style="background-color: #d4edda; border: 1px solid #c3e6cb;">
+                <h2 style="color: #155724;">{card['a']}</h2>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Controls
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("⬅️ Previous"):
+                prev_card()
+        with c2:
+            if st.button("👀 Show/Hide Answer"):
+                toggle_answer()
+        with c3:
+            if st.button("Next ➡️"):
+                next_card()
+                
+        if st.button("🔀 Shuffle Deck"):
+            shuffle_cards()
 
-# --- 7. MAIN INTERFACE ---
-show_branding()
+elif menu == "Mock Quiz":
+    st.markdown('<div class="main-header">📝 Mini Mock Test</div>', unsafe_allow_html=True)
+    
+    if st.session_state.quiz_finished:
+        st.balloons()
+        st.markdown(f"""
+        <div style="text-align: center; padding: 20px; background-color: #e2e3e5; border-radius: 10px;">
+            <h2>Quiz Completed!</h2>
+            <h1>Score: {st.session_state.quiz_score} / {len(QUIZ_DATA)}</h1>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔄 Restart Quiz"):
+            restart_quiz()
+    else:
+        q_data = QUIZ_DATA[st.session_state.quiz_index]
+        
+        st.markdown(f"**Question {st.session_state.quiz_index + 1} of {len(QUIZ_DATA)}** ({q_data['subject']})")
+        st.progress((st.session_state.quiz_index) / len(QUIZ_DATA))
+        
+        st.markdown(f"### {q_data['question']}")
+        
+        cols = st.columns(2)
+        for i, option in enumerate(q_data['options']):
+            if cols[i % 2].button(option, key=f"opt_{i}"):
+                check_answer(option, q_data['answer'])
 
-# If not verified, show landing teaser and stop
-if not st.session_state.is_verified:
-    st.markdown("---")
+elif menu == "About":
+    st.markdown('<div class="main-header">ℹ️ About NeetX Pro</div>', unsafe_allow_html=True)
     st.markdown("""
-    <div style="background-color: #0A110A; padding: 25px; border-radius: 12px; border-left: 5px solid #2ECC71; text-align: center; margin-bottom: 30px;">
-        <h3 style="color: #FFFFFF; margin:0;">👋 Welcome to NEETx PRO</h3>
-        <p style="color: #AAAAAA; margin-top: 10px;">
-            The ultimate AI tool for NEET UG Aspirants.<br>
-            <strong>Use the Sidebar on the left to Register for FREE access!</strong>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    **NeetX Pro** is a simplified demonstration app built with Python and Streamlit to help students prepare for the National Eligibility cum Entrance Test (NEET).
     
-    # --- NEET SPECIALIZED FEATURES ---
-    c1, c2 = st.columns(2)
-    with c1:
-        st.info("**🧬 NCERT Biology Mastery**\n\nDeep understanding of every line of NCERT. We explain diagrams and theory instantly.")
-        st.info("**🧪 Organic & Inorganic Wizard**\n\nLearn reactions, exceptions, and mechanisms with clear steps.")
-        st.info("**🧘 Stress & Strategy**\n\nNot just studies—we help you manage exam pressure and build a winning mindset.")
-    with c2:
-        st.info("**👁️ Vision Intelligence**\n\nClick a photo of any diagram or question. We solve it instantly.")
-        st.info("**➗ Physics Simplified**\n\nStruggling with calculations? We break down numericals into simple steps.")
-        st.info("**⚡ Rank Dominance**\n\nStrategies used by Toppers to score 700+. Beat the competition.")
-    st.stop()
-
-# --- 8. FLASHCARD DISPLAY LOGIC ---
-if st.session_state.flashcards:
-    st.markdown("### ⚡ Flashcard Session")
-    components.html(get_flashcard_html(st.session_state.flashcards), height=400)
-    if st.button("❌ Close Flashcards", key="close_fc"):
-        st.session_state.flashcards = None
-        st.rerun()
-    st.markdown("---")
-
-# --- 9. CHAT LOGIC ---
-try:
-    # ------------------------------------------------------------------
-    # IMPORTANT: ADD YOUR KEYS TO .streamlit/secrets.toml for security!
-    # Or replace st.secrets calls below with the keys you provided.
-    # ------------------------------------------------------------------
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    assistant_id = st.secrets["ASSISTANT_ID"]
-except Exception as e:
-    st.error("🚨 System Error: OpenAI Keys missing. Please add them to secrets.toml")
-    st.stop()
-
-if "thread_id" not in st.session_state:
-    try:
-        thread = client.beta.threads.create()
-        st.session_state.thread_id = thread.id
-    except:
-        st.error("Connection error. Please refresh.")
-        st.stop()
-
-# Handle Audio Input
-audio_prompt = None
-if 'audio_value' in locals() and audio_value and not st.session_state.processing:
-    with st.spinner("🎧 Listening..."):
-        try:
-            transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_value, language="en")
-            audio_prompt = transcription.text
-        except:
-            pass
-
-# Handle Text Input
-text_prompt = st.chat_input("Ask a doubt (Biology, Phy, Chem)...", disabled=st.session_state.processing)
-prompt = audio_prompt if audio_prompt else text_prompt
-
-if prompt:
-    st.session_state.processing = True
-    msg_data = {"role": "user", "content": prompt}
+    **Features:**
+    - Topic-wise Flashcards for quick revision.
+    - Interactive Mock Quizzes.
+    - Study Progress Dashboard.
     
-    if st.session_state.current_uploaded_file:
-        uf = st.session_state.current_uploaded_file
-        msg_data.update({"file_data": uf.getvalue(), "file_name": getattr(uf, "name", "file"), "file_type": getattr(uf, "type", "")})
-            
-    st.session_state.messages.append(msg_data)
-    st.rerun()
-
-# Display Messages
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar=LOGO_PATH if msg["role"]=="assistant" else "🧑‍⚕️"):
-        if "file_data" in msg:
-            if str(msg["file_type"]).startswith("image"): st.image(msg["file_data"], width=200)
-            else: st.markdown(f"📄 *{msg.get('file_name')}*")
-        st.markdown(clean_latex_for_chat(msg["content"]))
-
-# Generate Response
-if st.session_state.processing and st.session_state.messages[-1]["role"] == "user":
-    msg_text = st.session_state.messages[-1]["content"]
-    api_content = [{"type": "text", "text": msg_text}]
-    att = []
-    
-    # Handle File Attachment
-    uploaded_file_obj = st.session_state.current_uploaded_file
-    if uploaded_file_obj:
-        try:
-            tfile = f"temp_{getattr(uploaded_file_obj, 'name', 'file')}"
-            with open(tfile, "wb") as f: f.write(uploaded_file_obj.getbuffer())
-            fres = client.files.create(file=open(tfile, "rb"), purpose="assistants")
-            
-            if uploaded_file_obj.type == "application/pdf":
-                att.append({"file_id": fres.id, "tools": [{"type": "code_interpreter"}]})
-            else:
-                api_content.append({"type": "image_file", "image_file": {"file_id": fres.id}})
-            
-            try: os.remove(tfile)
-            except: pass
-        except:
-            pass 
-    
-    try:
-        client.beta.threads.messages.create(thread_id=st.session_state.thread_id, role="user", content=api_content, attachments=att if att else None)
-        
-        # --- NEET SPECIALIZED INSTRUCTIONS WITH HINGLISH & HIDDEN CODE ---
-        base_instructions = """
-        You are NEETx, an elite AI Tutor for NEET UG aspirants.
-        
-        ERROR_HANDLING_AND_SCOPE:
-        1. **STRICT DOMAIN BOUNDARY**: Your knowledge is strictly limited to Physics, Chemistry, and Biology relevant to NEET UG.
-        2. **IRRELEVANT TOPICS**: If the user asks about topics NOT related to NEET (e.g., general coding, politics, movies, cooking, dating, sports, general news):
-           - **Action**: Provide a VERY BRIEF (maximum 1 sentence) factual definition of the topic to be polite.
-           - **Pivot**: Immediately pivot back to NEET preparation, reminding them of the goal (White Coat/MBBS).
-           - **Redirect**: Ask a relevant question to bring them back.
-           - **Example**: User: "Who won the cricket match?" -> Bot: "India won the match. But Future Doctor, distractions won't get us to AIIMS. Let's focus on Genetics?"
-        
-        YOUR PERSONA:
-        - **Role:** Senior Medical Student Mentor.
-        - **Language:** **Hinglish** (Mix of English & Hindi). Use phrases like "Dekho future doctor," "Ye concept important hai," "Samjhe?".
-        - **Tone:** Encouraging, Disciplined, and Friendly.
-        
-        MANDATORY OPERATING RULES:
-        1. **SILENT CALCULATIONS (CRITICAL):** For Physics/Chemistry numericals, use the **Code Interpreter (Python)** tool to calculate.
-           - **NEVER** output the Python code, variable assignments (e.g. `L_orbital = ...`), or print statements to the user.
-           - **ONLY** show the formula in LaTeX, the values substituted, and the final answer.
-        
-        2. **BIOLOGY = NCERT:** Strictly stick to NCERT content. Quote lines.
-        
-        3. **FORMATTING:** Use LaTeX ($...$ for inline, $$...$$ for block) for all math/science.
-        
-        4. **SEARCH:** Use internal tools to find recent cutoffs/trends if asked.
-        
-        5. **MOTIVATION:** If they are wrong, say "Koi baat nahi, wapas try karte hain."
-        """
-
-        # NEETx ULTIMATE INJECTION
-        if st.session_state.ultimate_mode:
-            base_instructions += """
-            \n\n*** ULTRA MODE ACTIVATED ***
-            The user has enabled 'NEETx Ultimate'. 
-            1. INCREASE COMPLEXITY: Assume the user is aiming for Rank 1 (720/720).
-            2. INTER-LINKING: Actively connect concepts (e.g., Genetics + Evolution, Electrostatics + Gravitation).
-            3. TRICKY QUESTIONS: Focus on assertion-reasoning and statement-based questions common in recent NEET exams.
-            4. TONE: Highly focused, rigorous, and demanding.
-            """
-
-        # DEEP RESEARCH INJECTION
-        if st.session_state.deep_research_mode:
-            base_instructions += """
-            \n\n*** DEEP RESEARCH MODE ACTIVATED ***
-            1. EXPLAIN LIKE A SCIENTIST: The user wants deep theoretical understanding beyond rote memorization.
-            2. FIRST PRINCIPLES: Explain the 'why' behind biological mechanisms and physical laws.
-            3. DEPTH OVER BREADTH: Go deep into the underlying mechanisms.
-            """
-        
-        with st.chat_message("assistant", avatar=LOGO_PATH):
-            stream = client.beta.threads.runs.create(
-                thread_id=st.session_state.thread_id, assistant_id=assistant_id, stream=True,
-                additional_instructions=base_instructions,
-                tools=[{"type": "code_interpreter"}]
-            )
-            resp = st.empty()
-            full_text = ""
-            
-            for event in stream:
-                if event.event == "thread.message.delta":
-                    for c in event.data.delta.content:
-                        if c.type == "text":
-                            full_text += c.text.value
-                            resp.markdown(clean_latex_for_chat(full_text) + "▌")
-            
-            resp.markdown(clean_latex_for_chat(full_text))
-            st.session_state.messages.append({"role": "assistant", "content": full_text})
-            
-    except Exception as e:
-        st.session_state.messages.append({"role": "assistant", "content": "⚠️ Network issue. Please try again."})
-    
-    st.session_state.current_uploaded_file = None
-    st.session_state.uploader_key += 1
-    if 'audio_value' in locals() and audio_value: st.session_state.audio_key += 1
-    st.session_state.processing = False
-    st.rerun()
+    Built for future doctors! 🩺
+    """)
