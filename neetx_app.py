@@ -80,11 +80,26 @@ st.markdown("""
         box-shadow: 0px 0px 10px rgba(46, 204, 113, 0.4) !important;
     }
     
-    /* File Uploader */
-    [data-testid="stFileUploader"] { 
-        background-color: #0A110A !important; 
-        border: 1px solid #1E3A1E !important; 
-        border-radius: 8px !important; 
+    /* File Uploader - Force Dark Theme Consistency (JEEx Style) */
+    [data-testid="stFileUploader"], .stFileUploader, .stFileUploader * {
+        background-color: #0A110A !important;
+        color: #E0E0E0 !important;
+        border: 1px solid #1E3A1E !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stFileUploader"] input::placeholder { color: #AAAAAA !important; opacity: 1 !important; }
+    [data-testid="stFileUploader"] .css-1v0mbdj, [data-testid="stFileUploader"] .css-1f0tk5o { color: #E0E0E0 !important; }
+    
+    /* Voice / audio widget block - Force Dark Theme Consistency (JEEx Style) */
+    .stAudioInput, .stAudioInput *, .st-audio-player, audio {
+        background-color: #0A110A !important;
+        color: #E0E0E0 !important;
+        border: 1px solid #1E3A1E !important;
+        border-radius: 8px !important;
+    }
+    .stAudioInput [role="status"], .stAudioInput .stText, .stAudioInput .stMarkdown {
+        color: #E0E0E0 !important;
+        background: transparent !important;
     }
     
     /* Chat Input */
