@@ -108,6 +108,16 @@ st.markdown("""
     /* Spinner/Loader Color */
     .stSpinner > div > div { border-top-color: #2ECC71 !important; }
 
+    /* Tooltips/Help Text - Force Dark Theme Visibility */
+    div[data-baseweb="popover"], div[data-baseweb="tooltip"] {
+        background-color: #0A110A !important;
+        border: 1px solid #2ECC71 !important;
+    }
+    div[data-baseweb="popover"] div, div[data-baseweb="tooltip"] div {
+        background-color: #0A110A !important;
+        color: #E0E0E0 !important;
+    }
+
     .block-container { padding-top: 1rem; padding-bottom: 140px; max-width: 1200px; margin: 0 auto; }
 </style>
 """, unsafe_allow_html=True)
