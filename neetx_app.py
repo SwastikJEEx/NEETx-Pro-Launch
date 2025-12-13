@@ -10,15 +10,12 @@ import traceback
 import logging
 
 # --- 1. CONFIGURATION ---
-# CHANGED: layout="wide" for wider chat area
 st.set_page_config(page_title="NEETx Pro", page_icon="🧬", layout="wide", initial_sidebar_state="expanded")
 
 # *** EMAIL SETTINGS ***
-# using FormSubmit, emails will be sent TO this address
 ADMIN_EMAIL = "neetxaipro@gmail.com"  
 
 # --- 2. GLOBAL CONSTANTS ---
-# Using the local file name as per your last setup
 LOGO_PATH = "logo.jpg.png"
 
 # --- 3. SESSION STATE INITIALIZATION ---
@@ -34,9 +31,9 @@ if "is_verified" not in st.session_state: st.session_state.is_verified = False
 if "user_details" not in st.session_state: st.session_state.user_details = {}
 
 # MODE STATES
-# We initialize this key in session state for the toggle to bind to it
 if "ultimate_mode" not in st.session_state: st.session_state.ultimate_mode = False
 if "deep_research_mode" not in st.session_state: st.session_state.deep_research_mode = False
+if "mistake_analysis_mode" not in st.session_state: st.session_state.mistake_analysis_mode = False
 
 # Simple logger
 logger = logging.getLogger("neetx")
@@ -238,7 +235,6 @@ with st.sidebar:
         st.markdown("### ⚡ Power Tools")
         
         # 1. NEETx Ultimate Toggle
-        # Using key='ultimate_mode' automatically syncs with session_state, fixing the 2-click bug.
         st.toggle("🔥 NEETx Ultimate", key="ultimate_mode", help="Unlock advanced problem solving and deep conceptual analysis.")
         
         if st.session_state.ultimate_mode:
@@ -257,7 +253,13 @@ with st.sidebar:
                 st.session_state.messages.append({"role": "assistant", "content": "Let's test your prep! 🎯 Topic batao, I'll generate a **Mini Mock Test** with 5 tough questions."})
                 st.rerun()
         
-        # 3. Deep Research Toggle (Full width below others)
+        # 3. Mistake Analyzer (Placed BELOW buttons)
+        st.toggle("⚠️ Mistake Analyzer", key="mistake_analysis_mode", help="AI actively hunts for your logic errors.")
+        
+        if st.session_state.mistake_analysis_mode:
+            st.caption("🔍 Analyzer: Active")
+
+        # 4. Deep Research Toggle (Placed BELOW buttons & Analyzer)
         st.toggle("🔬 Deep Research", key="deep_research_mode", help="Enable deep theoretical explanations and first-principles derivations.")
         
         if st.session_state.deep_research_mode:
@@ -433,7 +435,7 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
     try:
         client.beta.threads.messages.create(thread_id=st.session_state.thread_id, role="user", content=api_content, attachments=att if att else None)
         
-        # --- NEET SPECIALIZED INSTRUCTIONS WITH HINGLISH & HIDDEN CODE ---
+        # --- ENHANCED NEETx INSTRUCTIONS (Structure imported from JEEx but tailored for NEET) ---
         base_instructions = """
         You are NEETx, an elite AI Tutor for NEET UG aspirants.
         
@@ -450,18 +452,17 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
         - **Language:** **Hinglish** (Mix of English & Hindi). Use phrases like "Dekho future doctor," "Ye concept important hai," "Samjhe?".
         - **Tone:** Encouraging, Disciplined, and Friendly.
         
+        CORE CAPABILITIES:
+        1. **Deep NEET Knowledge Base**: Simulate an internet search by cross-referencing your internal database of NEET PYQs, NCERT nuances, and recent exam trends.
+        2. **Search Engine Behavior**: When asked about specific data (e.g., "Cutoff for AIIMS Delhi"), use your internal knowledge to provide the most recent accurate estimates.
+        
         MANDATORY OPERATING RULES:
         1. **SILENT CALCULATIONS (CRITICAL):** For Physics/Chemistry numericals, use the **Code Interpreter (Python)** tool to calculate.
-           - **NEVER** output the Python code, variable assignments (e.g. `L_orbital = ...`), or print statements to the user.
+           - **NEVER** output the Python code to the user.
            - **ONLY** show the formula in LaTeX, the values substituted, and the final answer.
-        
-        2. **BIOLOGY = NCERT:** Strictly stick to NCERT content. Quote lines.
-        
+        2. **BIOLOGY = NCERT**: Strictly stick to NCERT content. Quote lines.
         3. **FORMATTING:** Use LaTeX ($...$ for inline, $$...$$ for block) for all math/science.
-        
-        4. **SEARCH:** Use internal tools to find recent cutoffs/trends if asked.
-        
-        5. **MOTIVATION:** If they are wrong, say "Koi baat nahi, wapas try karte hain."
+        4. **MOTIVATION:** If they are wrong, say "Koi baat nahi, wapas try karte hain."
         """
 
         # NEETx ULTIMATE INJECTION
@@ -473,6 +474,17 @@ if st.session_state.processing and st.session_state.messages[-1]["role"] == "use
             2. INTER-LINKING: Actively connect concepts (e.g., Genetics + Evolution, Electrostatics + Gravitation).
             3. TRICKY QUESTIONS: Focus on assertion-reasoning and statement-based questions common in recent NEET exams.
             4. TONE: Highly focused, rigorous, and demanding.
+            """
+
+        # MISTAKE ANALYSIS INJECTION (NEW FEATURE)
+        if st.session_state.mistake_analysis_mode:
+            base_instructions += """
+            \n\n*** MISTAKE ANALYSIS MODE: CRITICAL ***
+            The user wants to find errors in their logic.
+            1. Analyze the user's question/solution for conceptual gaps, sign errors, or calculation mistakes.
+            2. If the user presents a solution, DO NOT just give the right answer. First, explicitly state: "Here is where you went wrong: [Explain Error]".
+            3. Then, provide the correct derivation or biological mechanism.
+            4. Be strict but constructive. Identify if the error is Conceptual (Logic) or Silly (Calculation).
             """
 
         # DEEP RESEARCH INJECTION
